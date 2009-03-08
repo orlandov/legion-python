@@ -1,0 +1,175 @@
+#!/usr/bin/python
+
+import asynchat
+import asyncore
+import ConfigParser
+import getopt
+import sys
+import socket
+import cStringIO
+import select
+
+class SocketStream:
+    def __init__(self, sock):
+        """Initiate a socket (non-blocking) and a buffer"""
+        self.sock = sock
+        self.buffer = cStringIO.StringIO()
+        self.closed = 1   # compatibility with SocketServer
+    
+    def write(self, data):
+        """Buffer the input, then send as many bytes as possible"""
+        self.buffer.write(data)
+        if self.writable():
+            buff = self.buffer.getvalue()
+            # next try/except clause suggested by Robert Brown
+            try:
+                    sent = self.sock.send(buff)
+            except:
+                    # Catch socket exceptions and abort
+                    # writing the buffer
+                    sent = len(data)
+
+            # reset the buffer to the data that has not yet be sent
+            self.buffer=cStringIO.StringIO()
+            self.buffer.write(buff[sent:])
+            
+    def finish(self):
+        """When all data has been received, send what remains
+        in the buffer"""
+        data = self.buffer.getvalue()
+        # send data
+        while len(data):
+            while not self.writable():
+                pass
+            sent = self.sock.send(data)
+            data = data[sent:]
+
+    def writable(self):
+        """Used as a flag to know if something can be sent to the socket"""
+        return select.select([],[self.sock],[])[1]
+
+
+class Client(self):
+    status = 'idle'
+    def idle(self):
+        self.status = 'idle'
+    def busy(self):
+        self.status = 'busy'
+
+class Master(object):
+    def __init__(self):
+        self.clients
+
+    def idle_slaves(self):
+        idle = []
+        for client in clients:
+            if client.is_slave() && client.is_idle():
+                client.append(client):
+
+    def check_idle_slaves(self):
+
+
+
+class MasterHandler(asynchat.async_chat):
+    def __init__(self, conn, addr, server):
+        asynchat.async_chat.__init__(self, conn)
+        self.rfile = cStringIO.StringIO()
+        self.wfile = cStringIO.StringIO()
+        self.master = Master()
+
+        self.conn = conn
+        self.addr = addr
+        self.server = server
+        self.sockstream = SocketStream(conn)
+
+        self.set_terminator ('\n')
+        self.found_terminator = self.handle_command
+
+    def collect_incoming_data(self, data):
+        self.rfile.write(data)
+
+    def handle_command(self):
+        self.rfile.seek(0)
+        line = self.rfile.read()
+        self.rfile.truncate(0) # this seems wrong
+        self.sockstream.write("yo dog: %s\n" % (line))
+        self.sockstream.finish()
+        
+
+class MasterServer(asyncore.dispatcher):
+    def __init__(self, port):
+        self.port = port
+
+        asyncore.dispatcher.__init__(self)
+
+        self.create_socket (socket.AF_INET, socket.SOCK_STREAM)
+        self.set_reuse_addr()
+        self.bind (('', port))
+        self.listen (1024)
+
+    def handle_accept(self):
+        try:
+            conn, addr = self.accept()
+        except socket.error:
+            print "OMG socket error!!"
+            return
+
+        MasterHandler(conn, addr, self)
+
+
+class Slave(object):
+    def __init__(self, config):
+        self.config = config
+
+    def run(self):
+        master = config.master
+        port = config.port
+
+
+def usage():
+    print """syntax: shake [options]
+        --master        start a master server
+        --slave         start a slave"""
+
+def get_options():
+    mode = None
+    debug = 0
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],
+                "msch", ['master','slave','help','debug='])
+        print opts, args
+        for opt,optarg in opts:
+            if opt == '--master':
+                mode = 'master'
+            elif opt == '--slave':
+                mode = 'slave'
+            elif opt == '--debug':
+                debug = int(optarg)
+        if not mode:
+            raise getopt.GetoptError('No mode specified')
+
+    except getopt.GetoptError:
+        usage()
+        sys.exit(2);
+
+    return { 'mode': mode, 'debug': debug }
+
+if __name__ == '__main__':
+    mode = None
+    debug = 0
+    master_port = 4200
+
+    options = get_options()
+
+    if options['mode'] == 'master':
+        app = Master(master_port)
+    elif options['mode'] == 'slave':
+        app = Slave(master="localhost", master_port=master_port)
+
+    asyncore.loop()
+
+#config_path = 'shake.conf'
+#config = ConfigParser.RawConfigParser()
+#config.read(config_path)
+
+
