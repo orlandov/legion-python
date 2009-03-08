@@ -49,25 +49,63 @@ class SocketStream:
         return select.select([],[self.sock],[])[1]
 
 
-class Client(self):
-    status = 'idle'
-    def idle(self):
-        self.status = 'idle'
-    def busy(self):
-        self.status = 'busy'
+class Client(object):
+    def __init__(self, conn, status='idle'):
+        self._status = status
+        self.conn = conn
+        self.socketstream = SocketStream(conn)
+
+    def status(self, status):
+        if status not in ['idle', 'busy']:
+            raise Exception('Invalid statusdt, "%s"' % (status))
+        self._status = status
+
+    def is_idle(self):
+        return self.status == 'idle'
+
+    def is_busy(self):
+        return self.status == 'busy'
+
+    def write(self, s):
+        self.socketstream.write(s)
+        self.socketstream.finish()
+
+    def start_job(self, job, cmd):
+        cmdstr = 'CMD %s RENDER -S %s -E %s -A "%s|%s"' % (
+            job.id, cmd.start, cmd.end, job.jobdir, job.blendfile)
+        self.write(cmdstr)
+        self.status('busy')
 
 class Master(object):
     def __init__(self):
-        self.clients
+        Master.clients = {}
+
+    def add_client(self, client):
+        Master.clients[client.conn.fileno()] = client
+        print "adding %s" % (client)
+
+    def clients():
+        return Master.clients
 
     def idle_slaves(self):
-        idle = []
-        for client in clients:
-            if client.is_slave() && client.is_idle():
-                client.append(client):
+        return [
+            client
+            for client in Master.clients
+            if client.is_slave() and client.is_idle()
+        ]
 
     def check_idle_slaves(self):
+        idle = self.idle_slaves()
+        active_job = self.jobs.get_active_job()
+        if not active_job: return
 
+        for slave in idle:
+            cmd = self.jobs.get_next_step_for(active_job, slave)
+            if (active_job.type == 'frames'):
+                client.start_job(active_job, cmd)
+            elif active_job.type == 'parts':
+                # parts rendering not supported yet
+                pass
 
 
 class MasterHandler(asynchat.async_chat):
@@ -75,12 +113,14 @@ class MasterHandler(asynchat.async_chat):
         asynchat.async_chat.__init__(self, conn)
         self.rfile = cStringIO.StringIO()
         self.wfile = cStringIO.StringIO()
-        self.master = Master()
-
         self.conn = conn
         self.addr = addr
         self.server = server
         self.sockstream = SocketStream(conn)
+
+        self.master = Master()
+        self.client = Client(self.conn)
+        self.master.add_client(self.client)
 
         self.set_terminator ('\n')
         self.found_terminator = self.handle_command
@@ -88,11 +128,17 @@ class MasterHandler(asynchat.async_chat):
     def collect_incoming_data(self, data):
         self.rfile.write(data)
 
+    def all_clients(self, msg):
+        print Master.clients
+        for client in Master.clients:
+            Master.clients[client].write("all msg: %s\n" % (msg))
+
     def handle_command(self):
         self.rfile.seek(0)
         line = self.rfile.read()
-        self.rfile.truncate(0) # this seems wrong
-        self.sockstream.write("yo dog: %s\n" % (line))
+        self.rfile.truncate(0)
+        self.all_clients('to all: %s' % (line))
+        self.sockstream.write("yo dog: %s\n" % (self.conn.fileno()))
         self.sockstream.finish()
         
 
@@ -162,7 +208,7 @@ if __name__ == '__main__':
     options = get_options()
 
     if options['mode'] == 'master':
-        app = Master(master_port)
+        app = MasterServer(master_port)
     elif options['mode'] == 'slave':
         app = Slave(master="localhost", master_port=master_port)
 
