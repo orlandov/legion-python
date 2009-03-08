@@ -79,25 +79,33 @@ class Client(object):
         self.status('busy')
 
 class Master(object):
-    def __init__(self):
-        Master.clients = {}
+    _clients = {}
 
-    def add_client(self, client):
-        Master.clients[client.conn.fileno()] = client
-        print "adding %s" % (client)
+    @staticmethod
+    def add_client(client):
+        Master._clients[client.conn.fileno()] = client
+        log.debug("Adding client with fileno %d" % (client.conn.fileno()))
+        log.debug("Clients in pool: %s" % len(Master.clients()))
 
+    @staticmethod
     def clients():
-        return Master.clients
+        return Master._clients
 
-    def idle_slaves(self):
-        return [
+    @staticmethod
+    def idle_slaves():
+        log.debug("Looking for idle slaves in pool")
+        idle = [
             client
-            for client in Master.clients
+            for client in Master.clients()
             if client.is_slave() and client.is_idle()
         ]
+        log.debug("Found %d idle slaves" % (len(idle)))
+        return idle
 
-    def check_idle_slaves(self):
-        idle = self.idle_slaves()
+    @staticmethod
+    def check_idle_slaves():
+        log.debug("Check for slaves that need work")
+        idle = Master.idle_slaves()
         active_job = self.jobs.get_active_job()
         if not active_job: return
 
@@ -108,6 +116,12 @@ class Master(object):
             elif active_job.type == 'parts':
                 # parts rendering not supported yet
                 pass
+
+    @staticmethod
+    def msg_all_clients(msg):
+        clients = Master.clients()
+        for client in clients:
+            clients[client].write("all msg: %s\n" % (msg))
 
 
 class MasterHandler(asynchat.async_chat):
@@ -120,9 +134,9 @@ class MasterHandler(asynchat.async_chat):
         self.server = server
         self.sockstream = SocketStream(conn)
 
-        self.master = Master()
         self.client = Client(self.conn)
-        self.master.add_client(self.client)
+        self.client = Client(self.conn)
+        Master.add_client(self.client)
 
         self.set_terminator ('\n')
         self.found_terminator = self.handle_command
@@ -130,22 +144,20 @@ class MasterHandler(asynchat.async_chat):
     def collect_incoming_data(self, data):
         self.rfile.write(data)
 
-    def all_clients(self, msg):
-        print Master.clients
-        for client in Master.clients:
-            Master.clients[client].write("all msg: %s\n" % (msg))
 
     def handle_command(self):
         self.rfile.seek(0)
         line = self.rfile.read()
+        log.debug('Handling command: "%s"' % (line))
         self.rfile.truncate(0)
-        self.all_clients('to all: %s' % (line))
+        Master.msg_all_clients('to all: %s' % (line))
         self.sockstream.write("yo dog: %s\n" % (self.conn.fileno()))
         self.sockstream.finish()
         
 
 class MasterServer(asyncore.dispatcher):
     def __init__(self, port):
+        log.debug('creating MasterServer instance')
         self.port = port
 
         asyncore.dispatcher.__init__(self)
@@ -156,6 +168,7 @@ class MasterServer(asyncore.dispatcher):
         self.listen (1024)
 
     def handle_accept(self):
+        log.debug('handle_accept')
         try:
             conn, addr = self.accept()
         except socket.error:
@@ -196,7 +209,7 @@ def create_logger():
     global log
     log = logging.root
     handler = logging.StreamHandler(sys.stderr)
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(msg)s\n')
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(msg)s\n")
     handler.setFormatter(formatter)
     log.addHandler(handler)
 
@@ -209,19 +222,16 @@ def get_options():
     mode = None
     debug = 0
 
-    if debug > 0:
-        log.info('enabling debug mode')
-        log.debug('test')
     try:
         opts, args = getopt.getopt(sys.argv[1:],
-                "msch", ['master','slave','help','debug'])
+                "mscdh", ['master','slave','help','debug'])
         print opts, args
         for opt,optarg in opts:
             if opt == '--master':
                 mode = 'master'
             elif opt == '--slave':
                 mode = 'slave'
-            elif opt == '--debug':
+            elif opt in ['-d', '--debug']:
                 debug = 1
         if not mode:
             raise getopt.GetoptError('No mode specified')
@@ -235,10 +245,13 @@ def get_options():
 if __name__ == '__main__':
     create_logger()
     mode = None
-    master_port = 4201
+    master_port = 4200
 
     options = get_options()
-    log.setLevel(options.get('debug'))
+    if options['debug'] > 0:
+        log.setLevel(options.get('debug'))
+        log.info('enabling debug mode')
+        log.debug('test')
 
     if options['mode'] == 'master':
         app = MasterServer(master_port)
