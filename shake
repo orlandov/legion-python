@@ -9,6 +9,8 @@ import socket
 import cStringIO
 import select
 
+import logging
+
 class SocketStream:
     def __init__(self, sock):
         """Initiate a socket (non-blocking) and a buffer"""
@@ -163,14 +165,40 @@ class MasterServer(asyncore.dispatcher):
         MasterHandler(conn, addr, self)
 
 
-class Slave(object):
-    def __init__(self, config):
-        self.config = config
+class SlaveHandler(asynchat.async_chat):
+    def __init__(self, conn):
+        pass
+
+    def collect_incoming_data(self, data):
+        self.rfile.write(data)
+
+    def handle_command(self):
+        self.rfile.seek(0)
+        line = self.rfile.read()
+        self.rfile.truncate(0) # this seems wrong
+        self.handle_line(line)
+        self.sockstream.write("server said: %s\n" % (line))
+        self.sockstream.finish()
+
+    def handle_lin(self, line):
+        print "server said: line"
+
+
+class SlaveClient(object):
+    def __init__(self, master, port):
+        self.master = master
+        self.port = port
 
     def run(self):
-        master = config.master
-        port = config.port
+        conn.write('O HAI');
 
+def create_logger():
+    global log
+    log = logging.root
+    handler = logging.StreamHandler(sys.stderr)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(msg)s\n')
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
 
 def usage():
     print """syntax: shake [options]
@@ -180,9 +208,13 @@ def usage():
 def get_options():
     mode = None
     debug = 0
+
+    if debug > 0:
+        log.info('enabling debug mode')
+        log.debug('test')
     try:
         opts, args = getopt.getopt(sys.argv[1:],
-                "msch", ['master','slave','help','debug='])
+                "msch", ['master','slave','help','debug'])
         print opts, args
         for opt,optarg in opts:
             if opt == '--master':
@@ -190,7 +222,7 @@ def get_options():
             elif opt == '--slave':
                 mode = 'slave'
             elif opt == '--debug':
-                debug = int(optarg)
+                debug = 1
         if not mode:
             raise getopt.GetoptError('No mode specified')
 
@@ -201,11 +233,12 @@ def get_options():
     return { 'mode': mode, 'debug': debug }
 
 if __name__ == '__main__':
+    create_logger()
     mode = None
-    debug = 0
-    master_port = 4200
+    master_port = 4201
 
     options = get_options()
+    log.setLevel(options.get('debug'))
 
     if options['mode'] == 'master':
         app = MasterServer(master_port)
