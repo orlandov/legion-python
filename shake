@@ -1,22 +1,31 @@
 #!/usr/bin/python
 
+# Shake - a render queue manager script
+# by Orlando Vazquez, 2009
+# 
+# - Inspired by Farmerjoe (http://farmerjoe.info/)
+# - Using code from http://code.activestate.com/recipes/259148/ for much of the
+#   network handling
+
 import asynchat
 import asyncore
 import ConfigParser
-import getopt
-import sys
-import socket
 import cStringIO
-import select
-
+import getopt
 import logging
+import select
+import simplejson
+import socket
+import sys
+import time
+import types
 
 class SocketStream:
     def __init__(self, sock):
         """Initiate a socket (non-blocking) and a buffer"""
         self.sock = sock
         self.buffer = cStringIO.StringIO()
-        self.closed = 1   # compatibility with SocketServer
+        self.closed = 1
     
     def write(self, data):
         """Buffer the input, then send as many bytes as possible"""
@@ -25,11 +34,11 @@ class SocketStream:
             buff = self.buffer.getvalue()
             # next try/except clause suggested by Robert Brown
             try:
-                    sent = self.sock.send(buff)
+                sent = self.sock.send(buff)
             except:
-                    # Catch socket exceptions and abort
-                    # writing the buffer
-                    sent = len(data)
+                # Catch socket exceptions and abort
+                # writing the buffer
+                sent = len(data)
 
             # reset the buffer to the data that has not yet be sent
             self.buffer=cStringIO.StringIO()
@@ -50,6 +59,170 @@ class SocketStream:
         """Used as a flag to know if something can be sent to the socket"""
         return select.select([],[self.sock],[])[1]
 
+# XXX this is horribly written, refactor this asap!
+class Job(object):
+    def __init__(self, job_file):
+        # read in the job file and assign the keys to ourself
+        valid_keys = [
+            'filename', 'startframe', 'endframe', 'step', 'timeout', 'jobdir',
+            'jobname', 'image_x', 'image_y', 'xparts', 'yparts'
+        ]
+
+        if type(job_file) == types.StringType:
+            fh = file(job_file, 'r')
+        else:
+            fh = job_file 
+
+        job_data = simplejson.loads(fh.read())
+
+        for key in job_data:
+            if key not in valid_keys: 
+                raise Exception('Invalid key in job file, "%s"' % key)
+            setattr(self, "_%s" % (key), job_data[key])
+
+        self._id = time.time()
+        self._job_file = job_file
+        self._tasks = []
+        self._status = 'pending'
+
+    def id(self): return self._id
+
+    def frames(self):
+        frame = self._startframe
+        self._type = 'frames'
+
+        self._tasks.extend([
+            dict(
+                number    = i,
+                frame     = frame+i,
+                status    = 'pending',
+                allocated = 0
+            )
+            for i in range(0, self._endframe - self._startframe)
+        ])
+
+    def parts(self):
+        # unimplemented
+        pass
+
+    def cleanup(self):
+        os.system('rm -R "%s"' % (self._job_dir))
+
+    def next_step_for(self, assigned_to):
+        log.info("get next step for job %d" % (self._id))
+        for task in job.tasks:
+            if task.status not in ['pending', 'error']:
+                continue
+            
+            task.status = 'rendering'
+            task.assigned_to = assigned_to
+            task.start_time = time.time()
+
+            if job.type == 'frame':
+                start = task.frame
+                end = task.frame + job.step
+                return (start, end)
+            elif job.type == 'parts':
+                pass
+
+
+# XXX this could/should be turned into an iterator
+class Jobs(object):
+    def __init__(self):
+        self._jobs = {}
+
+    def all(self):
+        return self._jobs
+
+    def by_status(self, status):
+        return (job if job.status == status for job in self.jobs)
+
+    def active(self):
+        return self.by_status('active')
+
+    def pending(self):
+        return self.by_status('pending')
+
+    # equiv to fj new_job
+    def add_job(job):
+        self._jobs[job._id] = job
+
+    def delete_job(self, client, job_id):
+        self._jobs[job.id].cleanup()
+        del self._jobs[job.id]
+
+    def active_job(self):
+        self.check_finished_jobs();
+        log.info("getting active job")
+
+        for job in self.active():
+            log.info("job %d" % (job.id(),));
+            log.info("status %d" % (job.status(),));
+            
+            # check for pending or error tasks
+            for task in job.tasks():
+                if task.status in ['pending', 'error']:
+                    return job
+       
+        # if there were no active jobs, make the first pending active
+        for job in self.pending():
+            job.status = 'active'
+            return job
+
+        # no jobs
+        return None
+
+    def check_finished_jobs(self):
+        log.info("checking status of all jobs")
+        for job in self._jobs:
+            running = None
+            for task in job.tasks:
+                if task.status != 'completed':
+                    running = True
+
+            if not running:
+                job.status = 'completed'
+
+                # parts are unimplemented
+                if job.type == 'parts':
+                    pass
+
+            log.info("job %d status = %s" % (job.status))
+    
+    def check_timed_out_tasks(self):
+        log.info("checking for timed out tasks")
+        for job in self.active:
+            for task in job.tasks:
+                if not (task.status == 'rendering'
+                    and task.start_time < time - job.timeout): break
+
+                job.status = 'pending'
+                log.warn("job %d frame %d has timed out and been re-queued")
+
+
+    def reset_tasks(self, job_id=None, slave=None):
+        all_complete = True
+        for job in self.all():
+            if job_id not in [job.id, None]
+                and job.status != 'complete'
+                and job.status != 'paused'): continue
+
+            for task in job.tasks:
+                if task.assigned_to != slave:
+                    continue
+
+                if task.status not in ['completed', 'pending']:
+                    task.status = 'pending'
+                    task.assigned_to = None
+                if task.status != 'complete':
+                    all_complete = False
+            
+            if not all_complete:
+                log.debug("setting job %d status to pending" % (job.id,))
+                job.status = 'pending'
+
+            if job_id: break
+
 
 class Client(object):
     def __init__(self, conn, status='idle'):
@@ -59,7 +232,7 @@ class Client(object):
 
     def status(self, status):
         if status not in ['idle', 'busy']:
-            raise Exception('Invalid statusdt, "%s"' % (status))
+            raise Exception('Invalid status, "%s"' % (status))
         self._status = status
 
     def is_idle(self):
@@ -78,34 +251,41 @@ class Client(object):
         self.write(cmdstr)
         self.status('busy')
 
-class Master(object):
-    _clients = {}
 
-    @staticmethod
-    def add_client(client):
-        Master._clients[client.conn.fileno()] = client
+class Master(object):
+    __shared_state = {} # handy borg pattern
+
+    def __init__(self):
+        self.__dict__ = self.__shared_state
+        self.__clients = {}
+
+    def add_client(self.client):
+        self.__clients[client.conn.fileno()] = client
         log.debug("Adding client with fileno %d" % (client.conn.fileno()))
         log.debug("Clients in pool: %s" % len(Master.clients()))
 
-    @staticmethod
-    def clients():
-        return Master._clients
+    def clients(self):
+        return self.__clients
 
-    @staticmethod
-    def idle_slaves():
+    def get_client(self, id):
+        try:
+            return self.__clients[id]
+        except KeyError:
+            raise Exception("Invalid id %d" % id)
+
+    def idle_slaves(self):
         log.debug("Looking for idle slaves in pool")
         idle = [
             client
-            for client in Master.clients()
+            for client in self.clients()
             if client.is_slave() and client.is_idle()
         ]
         log.debug("Found %d idle slaves" % (len(idle)))
         return idle
 
-    @staticmethod
-    def check_idle_slaves():
+    def check_idle_slaves(self):
         log.debug("Check for slaves that need work")
-        idle = Master.idle_slaves()
+        idle = self.idle_slaves()
         active_job = self.jobs.get_active_job()
         if not active_job: return
 
@@ -117,12 +297,6 @@ class Master(object):
                 # parts rendering not supported yet
                 pass
 
-    @staticmethod
-    def msg_all_clients(msg):
-        clients = Master.clients()
-        for client in clients:
-            clients[client].write("all msg: %s\n" % (msg))
-
 
 class MasterHandler(asynchat.async_chat):
     def __init__(self, conn, addr, server):
@@ -132,27 +306,23 @@ class MasterHandler(asynchat.async_chat):
         self.conn = conn
         self.addr = addr
         self.server = server
-        self.sockstream = SocketStream(conn)
 
-        self.client = Client(self.conn)
         self.client = Client(self.conn)
         Master.add_client(self.client)
 
-        self.set_terminator ('\n')
+        self.set_terminator('\n')
         self.found_terminator = self.handle_command
 
     def collect_incoming_data(self, data):
         self.rfile.write(data)
 
-
     def handle_command(self):
         self.rfile.seek(0)
         line = self.rfile.read()
-        log.debug('Handling command: "%s"' % (line))
         self.rfile.truncate(0)
-        Master.msg_all_clients('to all: %s' % (line))
-        self.sockstream.write("yo dog: %s\n" % (self.conn.fileno()))
-        self.sockstream.finish()
+
+        log.debug('Handling command: "%s"' % (line))
+        tokens = line.split()
         
 
 class MasterServer(asyncore.dispatcher):
@@ -172,10 +342,13 @@ class MasterServer(asyncore.dispatcher):
         try:
             conn, addr = self.accept()
         except socket.error:
-            print "OMG socket error!!"
+            log.critical("OMG socket error!!", exc_info=1)
             return
 
         MasterHandler(conn, addr, self)
+
+    def run(self):
+        asyncore.loop()
 
 
 class SlaveHandler(asynchat.async_chat):
@@ -209,7 +382,7 @@ def create_logger():
     global log
     log = logging.root
     handler = logging.StreamHandler(sys.stderr)
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(msg)s\n")
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(msg)s")
     handler.setFormatter(formatter)
     log.addHandler(handler)
 
@@ -258,7 +431,7 @@ if __name__ == '__main__':
     elif options['mode'] == 'slave':
         app = Slave(master="localhost", master_port=master_port)
 
-    asyncore.loop()
+    app.run()
 
 #config_path = 'shake.conf'
 #config = ConfigParser.RawConfigParser()
