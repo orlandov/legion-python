@@ -1,3 +1,9 @@
+#!python
+
+import types
+import simplejson
+import time
+
 # XXX this is horribly written, refactor this asap!
 class Job(object):
     def __init__(self, job_file):

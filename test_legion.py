@@ -1,23 +1,25 @@
 #!/usr/bin/python
 
 import unittest
-import shake
+import legion
 import socket
 import threading
 import StringIO
 import simplejson
 
+from legion.jobs import Job
+
 class TestJob(unittest.TestCase):
     def setUp(self):
         self.job_file = StringIO.StringIO()
         self.job_description = {
-            'filename': 'shake.blend',
+            'filename': 'legion.blend',
             'startframe': 1,
             'endframe': 250,
             'step': 5,
             'timeout': 180,
             'jobdir': 'jobdir',
-            'jobname': 'shakejob',
+            'jobname': 'legionjob',
             'image_x': 800,
             'image_y': 600,
             'xparts': 4,
@@ -27,10 +29,10 @@ class TestJob(unittest.TestCase):
         self.job_file.seek(0)
 
     def test_load_job(self):
-        job = shake.Job(self.job_file)
+        job = Job(self.job_file)
 
     def test_invalid_key(self):
-        self.job_file
+        pass
 
 
 class TestClient(unittest.TestCase):

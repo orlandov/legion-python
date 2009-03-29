@@ -175,7 +175,7 @@ class SlaveClient(object):
 
 
 def usage():
-    print """syntax: shake [options]
+    print """syntax: legion [options]
         --master        start a master server
         --slave         start a slave"""
 
@@ -223,7 +223,7 @@ if __name__ == '__main__':
 
     app.run()
 
-#config_path = 'shake.conf'
+#config_path = 'legion.conf'
 #config = ConfigParser.RawConfigParser()
 #config.read(config_path)
 

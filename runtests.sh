@@ -1,4 +1,4 @@
 #!/bin/bash
 
-./shake --master --debug &
-nosetests test_shake.py
+./legion --master --debug &
+nosetests test_legion.py
