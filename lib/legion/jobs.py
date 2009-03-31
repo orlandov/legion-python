@@ -4,6 +4,8 @@ import types
 import simplejson
 import time
 
+from legion.log import log 
+
 # XXX this is horribly written, refactor this asap!
 class Job(object):
     def __init__(self, job_file):
@@ -52,7 +54,7 @@ class Job(object):
         os.system('rm -R "%s"' % (self._job_dir))
 
     def next_step_for(self, assigned_to):
-        log.info("get next step for job %d" % (self._id))
+        log.msg("get next step for job %d" % (self._id))
         for task in job.tasks:
             if task.status not in ['pending', 'error']:
                 continue
@@ -69,7 +71,7 @@ class Job(object):
                 pass
 
     def set_task_status(self, frame, status, t):
-        log.info("Job %d: Setting task status for frame %d to '%s'"
+        log.msg("Job %d: Setting task status for frame %d to '%s'"
             % (self.id, status))
 
         for task in self.tasks:
@@ -89,7 +91,7 @@ class Jobs(object):
         return self._jobs
 
     def by_status(self, status):
-        return (job for job in self.jobs if job.status == status)
+        return (job for job in self.all() if job.status == status)
 
     def active(self):
         return self.by_status('active')
@@ -107,11 +109,11 @@ class Jobs(object):
 
     def active_job(self):
         self.check_finished_jobs();
-        log.info("getting active job")
+        log.msg("getting active job")
 
         for job in self.active():
-            log.info("job %d" % (job.id(),));
-            log.info("status %d" % (job.status(),));
+            log.msg("job %d" % (job.id(),));
+            log.msg("status %d" % (job.status(),));
             
             # check for pending or error tasks
             for task in job.tasks():
@@ -127,7 +129,7 @@ class Jobs(object):
         return None
 
     def check_finished_jobs(self):
-        log.info("checking status of all jobs")
+        log.msg("checking status of all jobs")
         for job in self._jobs:
             running = None
             for task in job.tasks:
@@ -141,10 +143,10 @@ class Jobs(object):
                 if job.type == 'parts':
                     pass
 
-            log.info("job %d status = %s" % (job.status))
+            log.msg("job %d status = %s" % (job.status))
     
     def check_timed_out_tasks(self):
-        log.info("checking for timed out tasks")
+        log.msg("checking for timed out tasks")
         for job in self.active:
             for task in job.tasks:
                 if not (task.status == 'rendering'
@@ -172,7 +174,7 @@ class Jobs(object):
                     all_complete = False
             
             if not all_complete:
-                log.debug("setting job %d status to pending" % (job.id,))
+                log.msg("setting job %d status to pending" % (job.id,))
                 job.status = 'pending'
 
             if job_id: break
