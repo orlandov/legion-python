@@ -1,0 +1,11 @@
+TODO:
+
+Basic:
+- Be able to break up an animation into parts to be rendered independently by
+  a computer farm.  System should be able to scale upwards, indefinately.
+- Clients should be able to be stopped and restarted
+- Submit job from blender
+
+Web Interface:
+- submit jobs via web interface
+- pause and start clients via web interface
