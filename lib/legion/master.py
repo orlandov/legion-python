@@ -36,13 +36,11 @@ class Master(object):
     def idle_clients(self):
         log.msg("Looking for idle clients in pool")
         log.msg("%s" % (self.clients,))
-        idle = [
+        return (
             self.clients[id]
             for id in self.clients
             if self.clients[id].is_idle()
-        ]
-        log.msg("Found %d idle clients" % (len(idle)))
-        return idle
+        )
 
     def check_idle_clients(self):
         log.msg("Check for clients that need work")
