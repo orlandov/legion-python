@@ -5,6 +5,7 @@ import re
 from legion.client import Client
 from legion.log import log
 from legion.jobs import Jobs
+from legion.error import LegionError
 
 class Master(object):
     def __init__(self):
@@ -18,13 +19,19 @@ class Master(object):
         log.msg("%d clients currently in pool" % len(self.clients))
 
     def remove_client(self, id):
-        del self.clients[id]
+        try:
+            del self.clients[id]
+        except KeyError:
+            raise LegionError('No client with id %d' % (id,))
 
     def clients(self):
         return self.clients
 
     def get_client(self, id):
-        return self.clients[id]
+        try:
+            return self.clients[id]
+        except KeyError:
+            raise LegionError('No client with id %d' % (id,))
 
     def idle_clients(self):
         log.msg("Looking for idle clients in pool")

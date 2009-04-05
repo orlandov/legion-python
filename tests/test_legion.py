@@ -1,71 +1,117 @@
 #!/usr/bin/python
 
-import unittest
-import legion
-import socket
-import threading
 import StringIO
+import copy
 import simplejson
+import sys
+import unittest
+
+sys.path.append('lib')
 
 from legion.jobs import Job
+from legion.master import Master
+from legion.error import LegionError
 
-class TestJob(unittest.TestCase):
-    def setUp(self):
-        self.job_file = StringIO.StringIO()
-        self.job_description = {
-            'filename': 'legion.blend',
-            'startframe': 1,
-            'endframe': 250,
-            'step': 5,
-            'timeout': 180,
-            'jobdir': 'jobdir',
-            'jobname': 'legionjob',
-            'image_x': 800,
-            'image_y': 600,
-            'xparts': 4,
-            'yparts': 4,
-        }
-        self.job_file.write(simplejson.dumps(self.job_description))
-        self.job_file.seek(0)
+class MockClient(object):
+    def __init__(self, *args, **kwargs):
+        self.received = []
+        self.id = 0
+        self.status = 'idle'
+        for k in kwargs:
+            setattr(self, k, kwargs[k])
 
-    def test_load_job(self):
-        job = Job(self.job_file)
+    def is_idle(self):
+        return self.status == 'idle'
 
-    def test_invalid_key(self):
-        pass
-
-
-class TestClient(unittest.TestCase):
-    def setUp(self):
-        pass
-
-class TestClient(unittest.TestCase):
-    def setUp(self):
-        pass
+    def send_line(self, line):
+        self.received.append(line)
 
 class TestMaster(unittest.TestCase):
-    def XXXtest_ohai(self):
-        self.port = 4200
-        c = Connect(':%s' % (self.port))
-        c.putln('o hai')
-        c.expect('o hai 4')
+    def setUp(self):
+        self.m = Master()
 
-class Connect():
-    def __init__(self, info=":"):
-        (host, port) = info.split(":")
-        port = int(port) or 4200
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setblocking(0)
-        self.sock.connect((host, port))
-        self.fh = self.sock.makefile('rw', 0)
-        self._cmds = []
+    def test_add_client(self):
+        c = MockClient()
+        self.m.add_client(c)
+        self.assertEqual(c.received, ['Welcome client 0'],
+            'received welcome string from master')
+        self.assertEqual(self.m.clients, { 0: c },
+            'new client appears in clients list')
 
-    def expect(self, s):
-        reply = self.fh.read()
-        assert(s == reply, "reply was %s" % (reply))
+    def test_remove_client(self):
+        c = MockClient()
+        self.m.add_client(c)
+        self.m.remove_client(0)
 
-    def putln(self, s):
-        self.put("%s\n" % (s));
+        self.assertEqual(self.m.clients, {},
+            'client was removed')
+        self.assertRaises(LegionError, self.m.remove_client, 420)
 
-    def put(self, s):
-        self.fh.write(s)
+    def test_get_client(self):
+        c = MockClient()
+        self.m.add_client(c)
+        self.m.get_client(0)
+
+        self.assertEqual(self.m.get_client(0), c, 'client was gotten')
+        self.assertRaises(LegionError, self.m.get_client, 420)
+
+    def test_idle_clients(self):
+        (p, i0, i1, b) = clients = [
+            MockClient(id=0, status='paused'),
+            MockClient(id=1, status='idle'),
+            MockClient(id=3, status='idle'),
+            MockClient(id=2, status='busy'),
+        ]
+
+        for c in clients:
+            self.m.add_client(c)
+
+        idle = self.m.idle_clients()
+
+        self.assert_(i0 in idle)
+        self.assert_(i1 in idle)
+        self.assert_(p not in idle)
+        self.assert_(b not in idle)
+
+
+
+# class TestJob(unittest.TestCase):
+#     def setUp(self):
+#         self.job_file = StringIO.StringIO()
+#         self.job_description = {
+#             'filename': 'legion.blend',
+#             'startframe': 1,
+#             'endframe': 250,
+#             'step': 5,
+#             'timeout': 180,
+#             'jobdir': 'jobdir',
+#             'jobname': 'legionjob',
+#             'image_x': 800,
+#             'image_y': 600,
+#             'xparts': 4,
+#             'yparts': 4,
+#         }
+#         self.job_file.write(simplejson.dumps(self.job_description))
+#         self.job_file.seek(0)
+# 
+#     def test_load_job(self):
+#         job = Job(self.job_file)
+# 
+#     def test_invalid_key(self):
+#         pass
+# 
+# 
+# class TestClient(unittest.TestCase):
+#     def setUp(self):
+#         pass
+# 
+# class TestClient(unittest.TestCase):
+#     def setUp(self):
+#         pass
+# 
+# class TestMaster(unittest.TestCase):
+#     def XXXtest_ohai(self):
+#         self.port = 4200
+#         c = Connect(':%s' % (self.port))
+#         c.putln('o hai')
+#         c.expect('o hai 4')
