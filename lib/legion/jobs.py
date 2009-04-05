@@ -12,7 +12,7 @@ class Job(object):
     def __init__(self, job_file):
         # read in the job file and assign the keys to ourself
         valid_keys = [
-            'filename', 'startframe', 'endframe', 'step', 'timeout', 'jobdir',
+            'filename', 'startframe', 'endframe', 'tasksize', 'timeout', 'jobdir',
             'jobname', 'image_x', 'image_y', 'xparts', 'yparts'
         ]
 
@@ -36,16 +36,19 @@ class Job(object):
 
     def frames(self):
         frame = self.startframe
-        self.type = 'frames'
+        self.type = 'frame'
 
         self.tasks.extend([
-            dict(
-                number    = i,
-                frame     = frame+i,
-                status    = 'pending',
-                allocated = 0
-            )
-            for i in range(0, self.endframe-self.startframe+1)
+            {
+                'startframe': frame,
+                'endframe':
+                    (frame+self.tasksize-1)
+                    if frame+self.tasksize-1 < self.endframe
+                    else frame+((self.endframe-self.startframe) % (self.tasksize)),
+                'status': 'pending',
+                'allocated': 0
+            }
+            for frame in range(self.startframe, self.endframe + 1, self.tasksize)
         ])
 
     def parts(self):
@@ -55,22 +58,25 @@ class Job(object):
     def cleanup(self):
         os.system('rm -R "%s"' % (self._job_dir))
 
-    def next_step_for(self, assigned_to):
-        log.msg("get next step for job %d" % (self._id))
-        for task in job.tasks:
-            if task.status not in ['pending', 'error']:
-                continue
-            
-            task.status = 'rendering'
-            task.assigned_to = assigned_to
-            task.start_time = time.time()
+    def next_task(self, assigned_to):
+        log.msg("get next step for job %d" % (self.id))
+        start = end = None
 
-            if job.type == 'frame':
-                start = task.frame
-                end = task.frame + job.step
-                return (start, end)
-            elif job.type == 'parts':
-                pass
+        incomplete = (
+            task
+            for task in self.tasks
+            if task['status'] in ['pending', 'error']
+        )
+       
+        try:
+            next_task = incomplete.next()
+            next_task['status'] = 'rendering'
+            next_task['assigned_to'] = assigned_to
+            next_task['start_time'] = time.time()
+
+            return next_task
+        except StopIteration:
+            return None
 
     def set_task_status(self, frame, status, t):
         log.msg("Job %d: Setting task status for frame %d to '%s'"

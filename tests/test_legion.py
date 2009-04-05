@@ -84,7 +84,7 @@ class TestJob(unittest.TestCase):
             'filename': 'legion.blend',
             'startframe': 1,
             'endframe': 6,
-            'step': 2,
+            'tasksize': 2,
             'timeout': 180,
             'jobdir': 'jobdir',
             'jobname': 'legionjob',
@@ -97,21 +97,22 @@ class TestJob(unittest.TestCase):
         self.update_job_file()
 
     def update_job_file(self):
+        self.job_file.seek(0)
         self.job_file.write(simplejson.dumps(self.job_dict))
         self.job_file.seek(0)
 
     def test_load_job(self):
         job = Job(self.job_file)
 
-        self.assertEqual(job.type, 'frames')
+        self.assertEqual(job.type, 'frame')
         self.assertEqual(job.status, 'pending')
         self.assertEqual(job.tasks, [
             {
-                'number': x,
-                'frame': x+1,
+                'startframe': x,
+                'endframe': x+1,
                 'status': 'pending',
                 'allocated': 0
-            } for x in range(6) ]
+            } for x in range(1, 7, 2) ]
         )
 
     def test_invalid_key(self):
@@ -123,9 +124,62 @@ class TestJob(unittest.TestCase):
 
         self.assertRaises(LegionError, load_job)
 
-    def test_next_step_for(self):
-        pass
+    def test_next_step(self):
+        c = MockClient()
+        job = Job(self.job_file)
 
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 1, 'start frame is correct')
+        self.assertEqual(task['endframe'], 2, 'end frame is correct')
+        self.assertEqual(task['assigned_to'], c, 'client is correct') 
+
+        task['status'] = 'complete'
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 3, 'start frame is correct')
+        self.assertEqual(task['endframe'], 4, 'end frame is correct')
+
+        task['status'] = 'complete'
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 5, 'start frame is correct')
+        self.assertEqual(task['endframe'], 6, 'end frame is correct')
+        
+        task['status'] = 'complete'
+        task = job.next_task(c)
+
+        self.assertEqual(task, None, 'None returned when all tasks complete')
+
+        self.job_dict['tasksize'] = 5
+        self.update_job_file()
+        job = Job(self.job_file)
+
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 1, 'start frame is correct')
+        self.assertEqual(task['endframe'], 5, 'end frame is correct')
+
+        task['status'] = 'complete'
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 6, 'start frame is correct')
+        self.assertEqual(task['endframe'], 6, 'end frame is correct')
+
+        self.job_dict['tasksize'] = 1
+        self.job_dict['startframe'] = 1
+        self.job_dict['endframe'] = 1
+        self.update_job_file()
+        job = Job(self.job_file)
+
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 1, 'start frame is correct')
+        self.assertEqual(task['endframe'], 1, 'end frame is correct')
+
+        self.job_dict['tasksize'] = 3
+        self.job_dict['startframe'] = 1
+        self.job_dict['endframe'] = 1
+        self.update_job_file()
+        job = Job(self.job_file)
+
+        task = job.next_task(c)
+        self.assertEqual(task['startframe'], 1, 'start frame is correct')
+        self.assertEqual(task['endframe'], 1, 'end frame is correct')
 
 # class TestClient(unittest.TestCase):
 #     def setUp(self):
