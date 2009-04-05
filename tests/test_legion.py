@@ -73,34 +73,59 @@ class TestMaster(unittest.TestCase):
         self.assert_(p not in idle)
         self.assert_(b not in idle)
 
+    def test_dispatch_idle_clients(self):
+        pass
 
 
-# class TestJob(unittest.TestCase):
-#     def setUp(self):
-#         self.job_file = StringIO.StringIO()
-#         self.job_description = {
-#             'filename': 'legion.blend',
-#             'startframe': 1,
-#             'endframe': 250,
-#             'step': 5,
-#             'timeout': 180,
-#             'jobdir': 'jobdir',
-#             'jobname': 'legionjob',
-#             'image_x': 800,
-#             'image_y': 600,
-#             'xparts': 4,
-#             'yparts': 4,
-#         }
-#         self.job_file.write(simplejson.dumps(self.job_description))
-#         self.job_file.seek(0)
-# 
-#     def test_load_job(self):
-#         job = Job(self.job_file)
-# 
-#     def test_invalid_key(self):
-#         pass
-# 
-# 
+class TestJob(unittest.TestCase):
+    def setUp(self):
+        self.job_file = StringIO.StringIO()
+        self.job_dict = {
+            'filename': 'legion.blend',
+            'startframe': 1,
+            'endframe': 10,
+            'step': 2,
+            'timeout': 180,
+            'jobdir': 'jobdir',
+            'jobname': 'legionjob',
+            'image_x': 800,
+            'image_y': 600,
+            'xparts': 4,
+            'yparts': 4,
+        }
+
+        self.update_job_file()
+
+    def update_job_file(self):
+        self.job_file.write(simplejson.dumps(self.job_dict))
+        self.job_file.seek(0)
+
+    def test_load_job(self):
+        job = Job(self.job_file)
+
+        self.assertEqual(job.type, 'frames')
+        self.assertEqual(job.status, 'pending')
+        self.assertEqual(job.tasks, [
+            {
+                'number': x,
+                'frame': x+1,
+                'status': 'pending',
+                'allocated': 0
+            }
+            for x in range(10)
+        ])
+
+
+    def test_invalid_key(self):
+        self.job_dict['invalid'] = 'invalid key'
+        self.update_job_file()
+
+        def load_job():
+            Job(self.job_file)
+
+        self.assertRaises(LegionError, load_job)
+
+
 # class TestClient(unittest.TestCase):
 #     def setUp(self):
 #         pass

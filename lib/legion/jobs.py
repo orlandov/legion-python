@@ -5,6 +5,7 @@ import simplejson
 import time
 
 from legion.log import log 
+from legion.error import LegionError
 
 # XXX this is horribly written, refactor this asap!
 class Job(object):
@@ -24,13 +25,14 @@ class Job(object):
 
         for key in job_data:
             if key not in valid_keys: 
-                raise Exception('Invalid key in job file, "%s"' % key)
+                raise LegionError('Invalid key in job file, "%s"' % key)
             setattr(self, "%s" % (key), job_data[key])
 
         self.id = time.time()
         self.job_file = job_file
         self.tasks = []
         self.status = 'pending'
+        self.frames()
 
     def frames(self):
         frame = self.startframe
@@ -43,7 +45,7 @@ class Job(object):
                 status    = 'pending',
                 allocated = 0
             )
-            for i in range(0, self.endframe - self.startframe)
+            for i in range(self.startframe-1, self.endframe)
         ])
 
     def parts(self):

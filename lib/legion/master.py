@@ -42,7 +42,7 @@ class Master(object):
             if self.clients[id].is_idle()
         )
 
-    def check_idle_clients(self):
+    def dispatch_idle_clients(self):
         log.msg("Check for clients that need work")
         idle = self.idle_clients()
         active_job = self.jobs.active_job()
