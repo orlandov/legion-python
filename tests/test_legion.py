@@ -83,7 +83,7 @@ class TestJob(unittest.TestCase):
         self.job_dict = {
             'filename': 'legion.blend',
             'startframe': 1,
-            'endframe': 10,
+            'endframe': 6,
             'step': 2,
             'timeout': 180,
             'jobdir': 'jobdir',
@@ -111,10 +111,8 @@ class TestJob(unittest.TestCase):
                 'frame': x+1,
                 'status': 'pending',
                 'allocated': 0
-            }
-            for x in range(10)
-        ])
-
+            } for x in range(6) ]
+        )
 
     def test_invalid_key(self):
         self.job_dict['invalid'] = 'invalid key'
@@ -124,6 +122,9 @@ class TestJob(unittest.TestCase):
             Job(self.job_file)
 
         self.assertRaises(LegionError, load_job)
+
+    def test_next_step_for(self):
+        pass
 
 
 # class TestClient(unittest.TestCase):

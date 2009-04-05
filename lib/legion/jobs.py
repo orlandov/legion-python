@@ -45,7 +45,7 @@ class Job(object):
                 status    = 'pending',
                 allocated = 0
             )
-            for i in range(self.startframe-1, self.endframe)
+            for i in range(0, self.endframe-self.startframe+1)
         ])
 
     def parts(self):
