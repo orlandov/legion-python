@@ -7,14 +7,21 @@ import time
 from legion.log import log 
 from legion.error import LegionError
 
-# XXX this is horribly written, refactor this asap!
+class Task(object):
+    def __init__(self, **kwargs):
+        for k in kwargs:
+            setattr(self, k, kwargs[k])
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
 class Job(object):
     def __init__(self, job_file):
         # read in the job file and assign the keys to ourself
-        valid_keys = [
-            'filename', 'startframe', 'endframe', 'tasksize', 'timeout', 'jobdir',
-            'jobname', 'image_x', 'image_y', 'xparts', 'yparts'
-        ]
+        valid_keys = """
+            filename startframe endframe tasksize timeout jobdir
+            jobname image_x image_y xparts yparts
+        """.split()
 
         if type(job_file) == types.StringType:
             fh = file(job_file, 'r')
@@ -39,15 +46,15 @@ class Job(object):
         self.type = 'frame'
 
         self.tasks.extend([
-            {
-                'startframe': frame,
-                'endframe':
-                    (frame+self.tasksize-1)
-                    if frame+self.tasksize-1 < self.endframe
-                    else frame+((self.endframe-self.startframe) % (self.tasksize)),
-                'status': 'pending',
-                'allocated': 0
-            }
+            Task(
+                startframe=frame,
+                endframe=
+                   (frame+self.tasksize-1)
+                   if frame+self.tasksize-1 < self.endframe
+                   else frame+((self.endframe-self.startframe) % (self.tasksize)),
+                status='pending',
+                allocated=0
+            )
             for frame in range(self.startframe, self.endframe + 1, self.tasksize)
         ])
 
@@ -58,34 +65,33 @@ class Job(object):
     def cleanup(self):
         os.system('rm -R "%s"' % (self._job_dir))
 
-    def next_task(self, assigned_to):
+    def assign_next_task(self, client):
         log.msg("get next step for job %d" % (self.id))
         start = end = None
 
         incomplete = (
             task
             for task in self.tasks
-            if task['status'] in ['pending', 'error']
+            if task.status in ['pending', 'error']
         )
        
         try:
             next_task = incomplete.next()
-            next_task['status'] = 'rendering'
-            next_task['assigned_to'] = assigned_to
-            next_task['start_time'] = time.time()
-
+            next_task.status = 'rendering'
+            next_task.client = client
+            next_task.start_time = time.time()
             return next_task
         except StopIteration:
             return None
 
     def set_task_status(self, frame, status, t):
         log.msg("Job %d: Setting task status for frame %d to '%s'"
-            % (self.id, status))
+            % (self.id, frame, status))
 
         for task in self.tasks:
-            if task.frame != frame: continue
+            if task.startframe != frame: continue
 
-            if job.frame == frame:
+            if self.type == 'frame':
                 task.status = status
                 if t: task.rendertime = t
                 break
