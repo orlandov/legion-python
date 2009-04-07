@@ -99,66 +99,42 @@ class Job(object):
 # XXX this could/should be turned into an iterator
 class Jobs(object):
     def __init__(self):
-        self._jobs = {}
+        self.jobs = {}
+        self.job_ids = []
+        self.active_job_id = None
 
     def all(self):
-        return self._jobs
+        return self.jobs
 
     def by_status(self, status):
-        return (job for job in self.all() if job.status == status)
-
-    def active(self):
-        return self.by_status('active')
+        return (self.jobs[job_id]
+                for job_id in self.job_ids
+                if self.jobs[job_id].status == status)
 
     def pending(self):
         return self.by_status('pending')
 
-    # equiv to fj new_job
-    def add_job(job):
-        self._jobs[job._id] = job
+    def add_job(self, job):
+        self.job_ids.append(job.id)
+        self.jobs[job.id] = job
 
-    def delete_job(self, client, job_id):
-        self._jobs[job.id].cleanup()
-        del self._jobs[job.id]
+    def delete_job(self, job_id):
+        self.jobs[job_id].cleanup()
+        del self.job_ids[self.job_ids.index(job_id)]
+        del self.jobs[job_id]
 
     def active_job(self):
-        self.check_finished_jobs();
         log.msg("getting active job")
 
-        for job in self.active():
-            log.msg("job %d" % (job.id(),));
-            log.msg("status %d" % (job.status(),));
-            
-            # check for pending or error tasks
-            for task in job.tasks():
-                if task.status in ['pending', 'error']:
-                    return job
-       
-        # if there were no active jobs, make the first pending active
-        for job in self.pending():
-            job.status = 'active'
-            return job
+        if not self.active_job_id or \
+           not self.jobs[self.active_job_id].all_tasks_complete():
+            try:
+                self.active_job_id = self.pending().next().id
+            except StopIteration:
+                return None # no jobs
 
-        # no jobs
-        return None
+        return self.jobs[self.active_job_id]
 
-    def check_finished_jobs(self):
-        log.msg("checking status of all jobs")
-        for job in self._jobs:
-            running = None
-            for task in job.tasks:
-                if task.status != 'completed':
-                    running = True
-
-            if not running:
-                job.status = 'completed'
-
-                # parts are unimplemented
-                if job.type == 'parts':
-                    pass
-
-            log.msg("job %d status = %s" % (job.status))
-    
     def check_timed_out_tasks(self):
         log.msg("checking for timed out tasks")
         for job in self.active:

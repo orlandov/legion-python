@@ -8,17 +8,22 @@ import unittest
 
 sys.path.append('lib')
 
-from legion.jobs import Job, Task
+from legion.jobs import Job, Jobs, Task
 from legion.master import Master
 from legion.error import LegionError
 
-class MockClient(object):
+class Mocked(object):
+    def __init__(self, *args, **kwargs):
+        for k in kwargs:
+            setattr(self, k, kwargs[k])
+
+
+class MockClient(Mocked):
     def __init__(self, *args, **kwargs):
         self.received = []
         self.id = 0
         self.status = 'idle'
-        for k in kwargs:
-            setattr(self, k, kwargs[k])
+        Mocked.__init__(self, *args, **kwargs)
 
     def is_idle(self):
         return self.status == 'idle'
@@ -196,6 +201,60 @@ class TestJob(unittest.TestCase):
         self.assertEqual(job.tasks[0].status, 'complete')
         self.assertEqual(job.tasks[1].status, 'rendering')
 
+class MockJob(Mocked):
+    def __init__(self, *args, **kwargs):
+        self.all_tasks_complete = False
+        Mocked.__init__(self, *args, **kwargs)
+
+    def cleanup(self):
+        pass
+
+    def all_tasks_complete(self):
+        return self.all_tasks_complete
+
+class TestJobs(unittest.TestCase):
+    def setUp(self):
+        self.jobobjs = [
+            MockJob(id=1, status='complete'),
+            MockJob(id=2, status='pending'),
+            MockJob(id=3, status='pending')
+        ]
+
+        self.jobs = Jobs()
+
+    def add_jobs(self):
+        for job in self.jobobjs:
+            self.jobs.add_job(job)
+
+    def test_add_job(self):
+        self.add_jobs()
+
+        self.assertEqual(
+            [ job for job in self.jobs.all() ], 
+            [1, 2, 3]
+        )
+        self.assertEqual(
+            [ job.id for job in self.jobs.pending()  ], 
+            [2, 3]
+        )
+
+    def test_delete_job(self):
+        self.add_jobs()
+
+        self.jobs.delete_job(1)
+        self.assertEqual(
+            [ job for job in self.jobs.all()  ], 
+            [2, 3]
+        )
+
+    def test_active_job(self):
+        self.add_jobs()
+        active = self.jobs.active_job()
+        self.assertEqual(active.id, 2)
+
+        jobs = Jobs()
+        active = jobs.active_job()
+        self.assertEqual(active, None, 'no jobs available')
 
 # class TestClient(unittest.TestCase):
 #     def setUp(self):
