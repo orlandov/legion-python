@@ -30,6 +30,12 @@ class MasterService(service.Service):
     def master_factory(self):
         f = protocol.ServerFactory()
         f.master = Master()
+
+        def schedule_dispatch_idle_clients():
+            f.master.dispatch_idle_clients()
+            reactor.callLater(5, schedule_dispatch_idle_clients)
+
+        schedule_dispatch_idle_clients()
         f.protocol = MasterProtocol
         return f
 

@@ -1,5 +1,7 @@
 #!python
 
+import simplejson
+
 from legion.log import log
 
 class Client(object):
@@ -40,8 +42,17 @@ class Client(object):
         log.msg(">>> %d | %s" % (self.id, s))
         self._protocol.sendLine(s)
 
-    def start_job(self, job, cmd):
-        cmdstr = 'CMD %s RENDER -S %s -E %s -A "%s|%s"' % (
-            job.id, cmd.start, cmd.end, job.jobdir, job.blendfile)
+    def to_hash(self):
+        return { 'id': self._id, 'status': self.status }
+
+    def render_task(self, job, task):
+        cmd = {
+            'job': job,
+            'task': task,
+        }
+
+        def encode_obj(obj):
+            return obj.to_hash()
+        cmdstr = simplejson.dumps(cmd, default=encode_obj)
         self.send_line(cmdstr)
         self.status = 'busy'

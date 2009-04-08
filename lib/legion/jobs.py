@@ -8,21 +8,26 @@ from legion.log import log
 from legion.error import LegionError
 
 class Task(object):
+    KEYS = "startframe endframe status client".split()
     def __init__(self, **kwargs):
         for k in kwargs:
+            if k not in Task.KEYS: raise LegionError("Invalid key %s" % (k,))
             setattr(self, k, kwargs[k])
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
-class Job(object):
-    def __init__(self, job_file):
-        # read in the job file and assign the keys to ourself
-        valid_keys = """
-            filename startframe endframe tasksize timeout jobdir
-            jobname image_x image_y xparts yparts
-        """.split()
+    def to_hash(self):
+        hash = {}
+        for k in Task.KEYS:
+            hash[k] = getattr(self, k)
+        return hash
 
+class Job(object):
+
+    KEYS="filename startframe endframe tasksize timeout jobdir jobname".split()
+
+    def __init__(self, job_file):
         if type(job_file) == types.StringType:
             fh = file(job_file, 'r')
         else:
@@ -31,7 +36,7 @@ class Job(object):
         job_data = simplejson.loads(fh.read())
 
         for key in job_data:
-            if key not in valid_keys: 
+            if key not in Job.KEYS: 
                 raise LegionError('Invalid key in job file, "%s"' % key)
             setattr(self, "%s" % (key), job_data[key])
 
@@ -40,6 +45,12 @@ class Job(object):
         self.tasks = []
         self.status = 'pending'
         self.frames()
+
+    def to_hash(self):
+        hash = {}
+        for key in Job.KEYS:
+            hash[key] = getattr(self, key)
+        return hash
 
     def frames(self):
         frame = self.startframe
@@ -52,18 +63,16 @@ class Job(object):
                    (frame+self.tasksize-1)
                    if frame+self.tasksize-1 < self.endframe
                    else frame+((self.endframe-self.startframe) % (self.tasksize)),
-                status='pending',
-                allocated=0
+                status='pending'
             )
             for frame in range(self.startframe, self.endframe + 1, self.tasksize)
         ])
 
-    def parts(self):
-        # unimplemented
-        pass
+    def all_tasks_complete(self):
+        return [] == [ 1 for task in self.tasks if task.status != 'complete' ]
 
     def cleanup(self):
-        os.system('rm -R "%s"' % (self._job_dir))
+        os.system('rm -R "%s"' % (self.job_dir))
 
     def assign_next_task(self, client):
         log.msg("get next step for job %d" % (self.id))

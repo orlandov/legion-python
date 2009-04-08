@@ -4,13 +4,14 @@ import re
 
 from legion.client import Client
 from legion.log import log
-from legion.jobs import Jobs
+from legion.jobs import Job, Jobs
 from legion.error import LegionError
 
 class Master(object):
     def __init__(self):
         self.clients = {}
         self.jobs = Jobs()
+    
 
     def add_client(self, client):
         self.clients[client.id] = client
@@ -35,7 +36,6 @@ class Master(object):
 
     def idle_clients(self):
         log.msg("Looking for idle clients in pool")
-        log.msg("%s" % (self.clients,))
         return (
             self.clients[id]
             for id in self.clients
@@ -49,12 +49,8 @@ class Master(object):
         if not active_job: return
 
         for client in idle:
-            cmd = self.jobs.get_next_step_for(active_job, client)
-            if (active_job.type == 'frames'):
-                client.start_job(active_job, cmd)
-            elif active_job.type == 'parts':
-                # parts rendering not supported yet
-                pass
+            task = active_job.assign_next_task(client)
+            client.render_task(active_job, task)
 
     def handle_line(self, client_id, line):
         client = self.get_client(client_id)
@@ -76,8 +72,6 @@ class Master(object):
                 raise
         except Exception, e:
             client.send_line("Error: %s" % (e.__str__(),))
-
-        self.dispatch_idle_clients()
 
     def do_reset_tasks(self, client, args):
         self.jobs.reset_tasks(*args)

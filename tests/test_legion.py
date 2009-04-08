@@ -93,10 +93,6 @@ class TestJob(unittest.TestCase):
             'timeout': 180,
             'jobdir': 'jobdir',
             'jobname': 'legionjob',
-            'image_x': 800,
-            'image_y': 600,
-            'xparts': 4,
-            'yparts': 4,
         }
 
         self.update_job_file()
@@ -116,7 +112,6 @@ class TestJob(unittest.TestCase):
                 startframe=x,
                 endframe=x+1,
                 status='pending',
-                allocated=0
             ) for x in range(1, 7, 2) ]
         )
 
