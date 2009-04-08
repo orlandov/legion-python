@@ -77,7 +77,7 @@ class Master(object):
         except Exception, e:
             client.send_line("Error: %s" % (e.__str__(),))
 
-        self.check_idle_clients()
+        self.dispatch_idle_clients()
 
     def do_reset_tasks(self, client, args):
         self.jobs.reset_tasks(*args)
