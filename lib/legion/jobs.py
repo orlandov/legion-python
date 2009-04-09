@@ -10,6 +10,7 @@ from legion.error import LegionError
 class Task(object):
     KEYS = "startframe endframe status client".split()
     def __init__(self, **kwargs):
+        self.client = None
         for k in kwargs:
             if k not in Task.KEYS: raise LegionError("Invalid key %s" % (k,))
             setattr(self, k, kwargs[k])
@@ -25,7 +26,7 @@ class Task(object):
 
 class Job(object):
 
-    KEYS="filename startframe endframe tasksize timeout jobdir jobname".split()
+    KEYS="id filename startframe endframe tasksize timeout jobdir jobname".split()
 
     def __init__(self, job_file):
         if type(job_file) == types.StringType:
@@ -40,7 +41,7 @@ class Job(object):
                 raise LegionError('Invalid key in job file, "%s"' % key)
             setattr(self, "%s" % (key), job_data[key])
 
-        self.id = time.time()
+        self.id = int(time.time())
         self.job_file = job_file
         self.tasks = []
         self.status = 'pending'
@@ -69,7 +70,12 @@ class Job(object):
         ])
 
     def all_tasks_complete(self):
-        return [] == [ 1 for task in self.tasks if task.status != 'complete' ]
+        complete = [] == [ 1 for task in self.tasks if task.status != 'complete' ]
+        log.msg("%s" % (complete,))
+        if complete:
+            self.status = 'complete'
+            log.msg("All tasks complete for job %d" % (self.id))
+        return complete
 
     def cleanup(self):
         os.system('rm -R "%s"' % (self.job_dir))
@@ -93,17 +99,13 @@ class Job(object):
         except StopIteration:
             return None
 
-    def set_task_status(self, frame, status, t):
+    def set_task_status(self, frame, status):
         log.msg("Job %d: Setting task status for frame %d to '%s'"
             % (self.id, frame, status))
 
         for task in self.tasks:
             if task.startframe != frame: continue
-
-            if self.type == 'frame':
-                task.status = status
-                if t: task.rendertime = t
-                break
+            task.status = status
 
 # XXX this could/should be turned into an iterator
 class Jobs(object):
@@ -127,6 +129,9 @@ class Jobs(object):
         self.job_ids.append(job.id)
         self.jobs[job.id] = job
 
+    def get_job(self, id):
+        return self.jobs[id]
+
     def delete_job(self, job_id):
         self.jobs[job_id].cleanup()
         del self.job_ids[self.job_ids.index(job_id)]
@@ -135,14 +140,17 @@ class Jobs(object):
     def active_job(self):
         log.msg("getting active job")
 
+
         if not self.active_job_id or \
-           not self.jobs[self.active_job_id].all_tasks_complete():
+            self.jobs[self.active_job_id].status == 'complete' or \
+            self.jobs[self.active_job_id].all_tasks_complete():
             try:
                 self.active_job_id = self.pending().next().id
             except StopIteration:
                 return None # no jobs
 
         return self.jobs[self.active_job_id]
+
 
     def check_timed_out_tasks(self):
         log.msg("checking for timed out tasks")

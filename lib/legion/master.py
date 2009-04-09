@@ -15,7 +15,7 @@ class Master(object):
 
     def add_client(self, client):
         self.clients[client.id] = client
-        client.send_line("Welcome client %d" % (client.id))
+        client.send_line("# Welcome client %d" % (client.id))
         log.msg("Adding client %d" % (client.id))
         log.msg("%d clients currently in pool" % len(self.clients))
 
@@ -47,6 +47,8 @@ class Master(object):
         idle = self.idle_clients()
         active_job = self.jobs.active_job()
         if not active_job: return
+        log.msg("Active job %s" % (active_job.to_hash()))
+        log.msg("Active tasks %s" % ( [ t.to_hash() for t in active_job.tasks ], ))
 
         for client in idle:
             task = active_job.assign_next_task(client)
@@ -71,7 +73,21 @@ class Master(object):
             except AttributeError:
                 raise
         except Exception, e:
-            client.send_line("Error: %s" % (e.__str__(),))
+            client.send_line("Error: %s" % (e,))
+
+    def check_arg_count(self, args, count):
+        if len(args) != count: raise LegionError("Invalid number of arguments")
+
+    def do_set_task_status(self, client, args):
+        self.check_arg_count(args, 3)
+        jobid, taskid, status = args
+        jobid = int(jobid)
+        taskid = int(taskid)
+
+        job = self.jobs.get_job(jobid)
+        job.set_task_status(taskid, status)
+        log.msg("%s"  % ([jobid, taskid, status],))
+        client.status = 'idle'
 
     def do_reset_tasks(self, client, args):
         self.jobs.reset_tasks(*args)
@@ -107,4 +123,4 @@ class Master(object):
         client.send_line("pong")
 
     def do_status(self, client, args):
-        client.send_line("%d clients in pool" % (len(self.clients)))
+        client.send_line("# %d clients in pool" % (len(self.clients)))

@@ -38,7 +38,7 @@ class TestMaster(unittest.TestCase):
     def test_add_client(self):
         c = MockClient()
         self.m.add_client(c)
-        self.assertEqual(c.received, ['Welcome client 0'],
+        self.assertEqual(c.received, ["# Welcome client 0"],
             'received welcome string from master')
         self.assertEqual(self.m.clients, { 0: c },
             'new client appears in clients list')
@@ -251,6 +251,22 @@ class TestJobs(unittest.TestCase):
         active = jobs.active_job()
         self.assertEqual(active, None, 'no jobs available')
 
+    def test_task_to_hash(self):
+        t = Task(
+            startframe=1,
+            endframe=250,
+            status='pending',
+            client=None
+        )
+
+        self.assertEqual(
+            t.to_hash(),
+            { 'startframe': 1,
+              'endframe': 250,
+              'status': 'pending',
+              'client': None }
+        )
+
 # class TestClient(unittest.TestCase):
 #     def setUp(self):
 #         pass
@@ -265,3 +281,7 @@ class TestJobs(unittest.TestCase):
 #         c = Connect(':%s' % (self.port))
 #         c.putln('o hai')
 #         c.expect('o hai 4')
+
+if __name__ == '__main__':
+        unittest.main()
+

@@ -46,13 +46,16 @@ class Client(object):
         return { 'id': self._id, 'status': self.status }
 
     def render_task(self, job, task):
-        cmd = {
+        taskinfo = {
             'job': job,
             'task': task,
         }
 
         def encode_obj(obj):
             return obj.to_hash()
-        cmdstr = simplejson.dumps(cmd, default=encode_obj)
-        self.send_line(cmdstr)
+
+        # POST /jobs/:jobid/tasks/:taskid/render
+        path = "/jobs/%d/tasks/%d/render" % (job.id, task.startframe)
+        taskstr = simplejson.dumps(taskinfo, default=encode_obj)
+        self.send_line("POST %s %s" % (path, taskstr))
         self.status = 'busy'

@@ -13,6 +13,8 @@ from legion.log import log
 from legion.master import Master
 
 class MasterProtocol(basic.LineReceiver):
+    delimiter = '\n'
+
     def connectionMade(self):
         log.msg("New client connected")
         client = Client(self)
